@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 class PaymentRequestStatus(models.TextChoices):
@@ -99,3 +100,67 @@ class PaymentRequest(models.Model):
 
     def __str__(self):
         return f"{self.reference} - {self.customer}"
+
+
+class PaymentMethod(models.TextChoices):
+    ORANGE_MONEY = "ORANGE_MONEY", "Orange Money"
+    MTN_MOMO = "MTN_MOMO", "MTN Mobile Money"
+    CASH = "CASH", "Cash"
+    BANK_TRANSFER = "BANK_TRANSFER", "Virement bancaire"
+    OTHER = "OTHER", "Autre"
+
+
+class PaymentTransactionStatus(models.TextChoices):
+    CONFIRMED = "CONFIRMED", "Confirmee"
+    PENDING = "PENDING", "En attente"
+    FAILED = "FAILED", "Echouee"
+    CANCELLED = "CANCELLED", "Annulee"
+
+
+class PaymentTransaction(models.Model):
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        related_name="payment_transactions",
+    )
+    payment_request = models.ForeignKey(
+        "payments.PaymentRequest",
+        on_delete=models.PROTECT,
+        related_name="transactions",
+    )
+    amount_received = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices)
+    operator = models.CharField(max_length=50, blank=True)
+    payer_phone = models.CharField(max_length=20, blank=True)
+    transaction_reference = models.CharField(max_length=64)
+    status = models.CharField(
+        max_length=20,
+        choices=PaymentTransactionStatus.choices,
+        default=PaymentTransactionStatus.CONFIRMED,
+    )
+    paid_at = models.DateTimeField(default=timezone.now)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="confirmed_payment_transactions",
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "transaction_reference"],
+                name="uniq_transaction_reference_per_org",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.transaction_reference} - {self.amount_received}"

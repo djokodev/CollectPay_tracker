@@ -46,6 +46,7 @@ class ApiRootView(APIView):
                                 "customers": "/api/customers/",
                                 "services": "/api/catalog/services/",
                                 "payment_requests": "/api/payments/requests/",
+                                "payment_transactions": "/api/payments/transactions/",
                             },
                         },
                     )
@@ -74,6 +75,7 @@ class ApiRootView(APIView):
                     "customers": reverse("customers-list-create"),
                     "services": reverse("services-list-create"),
                     "payment_requests": reverse("payment-requests-list-create"),
+                    "payment_transactions": reverse("payment-transactions-list-create"),
                 },
             }
         )

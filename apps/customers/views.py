@@ -143,7 +143,7 @@ class CustomerPaymentHistoryView(GenericAPIView):
             )
             transactions = transaction_model.objects.filter(
                 payment_request_id__in=payment_request_ids
-            ).values("id", "status", "amount", "created_at")
+            ).values("id", "status", "amount_received", "transaction_reference", "created_at")
             payload["transactions"] = list(transactions)
 
         return Response(payload)

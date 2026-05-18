@@ -150,6 +150,8 @@ SPECTACULAR_SETTINGS = {
     "ENUM_NAME_OVERRIDES": {
         "AccountRoleEnum": "apps.accounts.models.UserRole",
         "OrganizationRoleEnum": "apps.organizations.models.OrganizationRole",
+        "PaymentRequestStatusEnum": "apps.payments.models.PaymentRequestStatus",
+        "PaymentTransactionStatusEnum": "apps.payments.models.PaymentTransactionStatus",
     },
 }
 

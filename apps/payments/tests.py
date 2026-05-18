@@ -211,3 +211,108 @@ class PaymentRequestsCoreTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], old_request.id)
+
+    def test_transaction_creation_updates_request_status(self):
+        self.auth("pay_agent")
+        create = self.client.post(
+            "/api/payments/requests/",
+            {
+                "customer": self.customer_a.id,
+                "service": self.service_a.id,
+                "expected_amount": "50000.00",
+            },
+            format="json",
+        )
+        request_id = create.data["id"]
+
+        tx_1 = self.client.post(
+            "/api/payments/transactions/",
+            {
+                "payment_request": request_id,
+                "amount_received": "30000.00",
+                "payment_method": "ORANGE_MONEY",
+                "transaction_reference": "OM123456A",
+                "status": "CONFIRMED",
+            },
+            format="json",
+        )
+        self.assertEqual(tx_1.status_code, status.HTTP_201_CREATED)
+
+        first_state = self.client.get(f"/api/payments/requests/{request_id}/")
+        self.assertEqual(first_state.data["status"], PaymentRequestStatus.PARTIAL)
+
+        tx_2 = self.client.post(
+            "/api/payments/transactions/",
+            {
+                "payment_request": request_id,
+                "amount_received": "20000.00",
+                "payment_method": "ORANGE_MONEY",
+                "transaction_reference": "OM123456B",
+                "status": "CONFIRMED",
+            },
+            format="json",
+        )
+        self.assertEqual(tx_2.status_code, status.HTTP_201_CREATED)
+
+        final_state = self.client.get(f"/api/payments/requests/{request_id}/")
+        self.assertEqual(final_state.data["status"], PaymentRequestStatus.PAID)
+
+    def test_transaction_reference_is_idempotent_per_org(self):
+        self.auth("pay_agent")
+        create = self.client.post(
+            "/api/payments/requests/",
+            {
+                "customer": self.customer_a.id,
+                "service": self.service_a.id,
+                "expected_amount": "50000.00",
+            },
+            format="json",
+        )
+        request_id = create.data["id"]
+
+        payload = {
+            "payment_request": request_id,
+            "amount_received": "10000.00",
+            "payment_method": "MTN_MOMO",
+            "transaction_reference": "MTN-REF-777",
+            "status": "CONFIRMED",
+        }
+        first = self.client.post("/api/payments/transactions/", payload, format="json")
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+
+        duplicate = self.client.post("/api/payments/transactions/", payload, format="json")
+        self.assertEqual(duplicate.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transaction_reference", duplicate.data["error"]["details"])
+
+    def test_transaction_list_and_request_transactions_scope(self):
+        self.auth("pay_agent")
+        create = self.client.post(
+            "/api/payments/requests/",
+            {
+                "customer": self.customer_a.id,
+                "service": self.service_a.id,
+                "expected_amount": "50000.00",
+            },
+            format="json",
+        )
+        request_id = create.data["id"]
+
+        self.client.post(
+            "/api/payments/transactions/",
+            {
+                "payment_request": request_id,
+                "amount_received": "10000.00",
+                "payment_method": "CASH",
+                "transaction_reference": "CASH-999",
+                "status": "CONFIRMED",
+            },
+            format="json",
+        )
+
+        tx_list = self.client.get("/api/payments/transactions/")
+        self.assertEqual(tx_list.status_code, status.HTTP_200_OK)
+        self.assertEqual(tx_list.data["count"], 1)
+
+        request_tx = self.client.get(f"/api/payments/requests/{request_id}/transactions/")
+        self.assertEqual(request_tx.status_code, status.HTTP_200_OK)
+        self.assertEqual(request_tx.data["count"], 1)

@@ -6,11 +6,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.accounts.models import UserRole
-from apps.payments.models import PaymentRequest, PaymentRequestStatus
+from apps.payments.models import (
+    PaymentRequest,
+    PaymentRequestStatus,
+    PaymentTransaction,
+    PaymentTransactionStatus,
+)
 from apps.payments.serializers import (
     CancelPaymentRequestSerializer,
     PaymentManualAmountSerializer,
     PaymentRequestSerializer,
+    PaymentTransactionCreateSerializer,
+    PaymentTransactionSerializer,
 )
 from core.api.permissions import has_minimum_role
 from core.api.tenancy import resolve_request_organization_id
@@ -171,3 +178,79 @@ class ApplyManualPaymentView(PaymentRequestBaseMixin, GenericAPIView):
 
         payment_request.save(update_fields=["paid_amount", "status", "updated_at"])
         return Response(PaymentRequestSerializer(payment_request).data)
+
+
+class PaymentTransactionListCreateView(PaymentRequestBaseMixin, ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return PaymentTransactionCreateSerializer
+        return PaymentTransactionSerializer
+
+    def get_queryset(self):
+        organization_id = self.get_organization_id_or_raise()
+        queryset = PaymentTransaction.objects.filter(organization_id=organization_id)
+
+        payment_request_id = self.request.query_params.get("payment_request_id")
+        if payment_request_id:
+            queryset = queryset.filter(payment_request_id=payment_request_id)
+
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        reference = self.request.query_params.get("transaction_reference")
+        if reference:
+            queryset = queryset.filter(transaction_reference__icontains=reference)
+
+        return queryset.select_related("payment_request").order_by("-created_at")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["organization_id"] = self.get_organization_id_or_raise()
+        return context
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        transaction = self.perform_create(serializer)
+        output = PaymentTransactionSerializer(transaction)
+        return Response(output.data, status=status.HTTP_201_CREATED)
+
+    def perform_create(self, serializer):
+        if not has_minimum_role(self.request.user, UserRole.AGENT):
+            raise PermissionDenied("Role insuffisant pour enregistrer une transaction.")
+
+        payment_request = serializer.validated_data["payment_request"]
+        transaction_status = serializer.validated_data.get(
+            "status", PaymentTransactionStatus.CONFIRMED
+        )
+
+        transaction = serializer.save(
+            organization_id=self.get_organization_id_or_raise(),
+            confirmed_by=self.request.user,
+        )
+
+        if transaction_status == PaymentTransactionStatus.CONFIRMED:
+            try:
+                payment_request.apply_manual_payment(transaction.amount_received)
+            except ValueError as exc:
+                raise ValidationError({"detail": str(exc)})
+            payment_request.save(update_fields=["paid_amount", "status", "updated_at"])
+        return transaction
+
+
+class PaymentRequestTransactionsView(PaymentRequestBaseMixin, ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = PaymentTransactionSerializer
+
+    def get_queryset(self):
+        payment_request = self.get_scoped_queryset().filter(id=self.kwargs["payment_request_id"]).first()
+        if not payment_request:
+            return PaymentTransaction.objects.none()
+        return (
+            PaymentTransaction.objects.filter(payment_request=payment_request)
+            .select_related("payment_request")
+            .order_by("-created_at")
+        )

@@ -40,6 +40,9 @@ class ApiRootView(APIView):
                                 "profile": "/api/auth/profile/",
                                 "users": "/api/auth/users/",
                                 "my_permissions": "/api/auth/my-permissions/",
+                                "organizations": "/api/organizations/",
+                                "my_organizations": "/api/organizations/mine/",
+                                "switch_active_organization": "/api/organizations/switch-active/",
                             },
                         },
                     )
@@ -62,6 +65,9 @@ class ApiRootView(APIView):
                     "profile": reverse("auth-profile"),
                     "users": reverse("auth-users-list"),
                     "my_permissions": reverse("auth-my-permissions"),
+                    "organizations": reverse("organizations-list-create"),
+                    "my_organizations": reverse("organizations-mine"),
+                    "switch_active_organization": reverse("organizations-switch-active"),
                 },
             }
         )

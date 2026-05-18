@@ -147,6 +147,10 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "API de suivi des paiements entrants",
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "AccountRoleEnum": "apps.accounts.models.UserRole",
+        "OrganizationRoleEnum": "apps.organizations.models.OrganizationRole",
+    },
 }
 
 CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())

@@ -159,13 +159,17 @@ class RolePermissionsTests(TestCase):
         token = login_response.data["access"]
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
-    def test_manager_can_list_users(self):
-        self._auth_as("manager_user")
+    def test_admin_can_list_users(self):
+        self._auth_as("admin_user")
         response = self.client.get("/api/auth/users/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 3)
 
-    def test_agent_cannot_list_users(self):
+    def test_non_admin_cannot_list_users(self):
+        self._auth_as("manager_user")
+        manager_response = self.client.get("/api/auth/users/")
+        self.assertEqual(manager_response.status_code, status.HTTP_403_FORBIDDEN)
+
         self._auth_as("agent_user")
         response = self.client.get("/api/auth/users/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

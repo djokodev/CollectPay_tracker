@@ -16,7 +16,7 @@ from apps.accounts.serializers import (
     UserProfileSerializer,
     UserSummarySerializer,
 )
-from core.api.permissions import IsAdminOrManagerRole, IsAdminRole, get_user_role
+from core.api.permissions import IsAdminRole, get_user_role
 
 
 User = get_user_model()
@@ -71,7 +71,7 @@ class ProfileView(RetrieveUpdateAPIView):
 
 
 class UserListView(GenericAPIView):
-    permission_classes = [IsAdminOrManagerRole]
+    permission_classes = [IsAdminRole]
     serializer_class = UserSummarySerializer
 
     def get(self, request):

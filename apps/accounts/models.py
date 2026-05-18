@@ -17,6 +17,13 @@ class AccountProfile(models.Model):
     )
     role = models.CharField(max_length=20, choices=UserRole.choices, default=UserRole.AGENT)
     phone = models.CharField(max_length=20, blank=True)
+    active_organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="active_profiles",
+    )
     is_active_member = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

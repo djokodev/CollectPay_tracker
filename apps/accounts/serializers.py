@@ -11,10 +11,12 @@ User = get_user_model()
 
 
 class AccountProfileSerializer(serializers.ModelSerializer):
+    active_organization_id = serializers.IntegerField(source="active_organization.id", read_only=True)
+
     class Meta:
         model = AccountProfile
-        fields = ("role", "phone", "is_active_member")
-        read_only_fields = ("role", "is_active_member")
+        fields = ("role", "phone", "active_organization_id", "is_active_member")
+        read_only_fields = ("role", "active_organization_id", "is_active_member")
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

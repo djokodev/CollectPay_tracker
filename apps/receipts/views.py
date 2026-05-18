@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.accounts.models import UserRole
+from apps.audit.services import write_audit_log
 from apps.payments.models import PaymentRequest, PaymentTransaction
 from apps.receipts.models import Receipt
 from apps.receipts.serializers import (
@@ -91,6 +92,21 @@ class GenerateReceiptView(ReceiptBaseMixin, GenericAPIView):
             payment_request=payment_request,
             transaction=transaction,
             issued_by=request.user,
+        )
+        write_audit_log(
+            action="receipt.generated",
+            entity_type="receipt",
+            entity_id=receipt.id,
+            organization_id=organization_id,
+            actor=request.user,
+            after_data={
+                "receipt_number": receipt.receipt_number,
+                "payment_request_id": receipt.payment_request_id,
+                "transaction_id": receipt.transaction_id,
+                "amount_paid": str(receipt.amount_paid),
+                "public_reference": str(receipt.public_reference),
+            },
+            request=request,
         )
         return Response(ReceiptSerializer(receipt).data, status=status.HTTP_201_CREATED)
 

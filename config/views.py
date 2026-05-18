@@ -49,6 +49,7 @@ class ApiRootView(APIView):
                                 "payment_transactions": "/api/payments/transactions/",
                                 "receipts": "/api/receipts/",
                                 "generate_receipt": "/api/receipts/generate/",
+                                "audit_logs": "/api/audit/logs/",
                             },
                         },
                     )
@@ -80,6 +81,7 @@ class ApiRootView(APIView):
                     "payment_transactions": reverse("payment-transactions-list-create"),
                     "receipts": reverse("receipts-list"),
                     "generate_receipt": reverse("receipts-generate"),
+                    "audit_logs": reverse("audit-logs-list"),
                 },
             }
         )

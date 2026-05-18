@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.accounts.models import UserRole
+from apps.audit.services import write_audit_log
 from apps.organizations.models import Organization, OrganizationMembership, OrganizationRole
 from apps.organizations.permissions import CanManageOrganization, MANAGER_ROLES, get_membership
 from apps.organizations.serializers import (
@@ -37,6 +38,19 @@ class OrganizationListCreateView(ListCreateAPIView):
             user=self.request.user,
             role=OrganizationRole.OWNER,
         )
+        write_audit_log(
+            action="organization.created",
+            entity_type="organization",
+            entity_id=organization.id,
+            organization_id=organization.id,
+            actor=self.request.user,
+            after_data={
+                "name": organization.name,
+                "slug": organization.slug,
+                "is_active": organization.is_active,
+            },
+            request=self.request,
+        )
 
         profile = self.request.user.account_profile
         if profile.active_organization_id is None:
@@ -58,7 +72,26 @@ class OrganizationDetailView(RetrieveUpdateAPIView):
         membership = get_membership(self.request.user, serializer.instance.id)
         if not membership or membership.role not in MANAGER_ROLES:
             raise PermissionDenied("Seuls les managers de l'organisation peuvent la modifier.")
-        serializer.save()
+        before = {
+            "name": serializer.instance.name,
+            "description": serializer.instance.description,
+            "is_active": serializer.instance.is_active,
+        }
+        updated = serializer.save()
+        write_audit_log(
+            action="organization.updated",
+            entity_type="organization",
+            entity_id=updated.id,
+            organization_id=updated.id,
+            actor=self.request.user,
+            before_data=before,
+            after_data={
+                "name": updated.name,
+                "description": updated.description,
+                "is_active": updated.is_active,
+            },
+            request=self.request,
+        )
 
 
 class OrganizationMemberListCreateView(GenericAPIView):
@@ -97,6 +130,20 @@ class OrganizationMemberListCreateView(GenericAPIView):
             user_id=serializer.validated_data["user_id"],
             defaults={"role": target_role, "is_active": True},
         )
+        write_audit_log(
+            action="organization.membership.upserted",
+            entity_type="organization_membership",
+            entity_id=obj.id,
+            organization_id=organization_id,
+            actor=request.user,
+            after_data={
+                "user_id": obj.user_id,
+                "role": obj.role,
+                "is_active": obj.is_active,
+                "created": created,
+            },
+            request=request,
+        )
 
         data = OrganizationMembershipSerializer(obj).data
         return Response(data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
@@ -117,6 +164,7 @@ class OrganizationMemberRoleUpdateView(GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         new_role = serializer.validated_data["role"]
+        before_role = membership.role
 
         if membership.role == OrganizationRole.OWNER and actor.role != OrganizationRole.OWNER:
             raise PermissionDenied("Seul le owner peut modifier le role d'un owner.")
@@ -129,6 +177,16 @@ class OrganizationMemberRoleUpdateView(GenericAPIView):
 
         membership.role = new_role
         membership.save(update_fields=["role", "updated_at"])
+        write_audit_log(
+            action="organization.membership.role_updated",
+            entity_type="organization_membership",
+            entity_id=membership.id,
+            organization_id=organization_id,
+            actor=request.user,
+            before_data={"role": before_role},
+            after_data={"role": membership.role},
+            request=request,
+        )
         return Response(OrganizationMembershipSerializer(membership).data)
 
 
@@ -159,8 +217,19 @@ class SwitchActiveOrganizationView(GenericAPIView):
             raise PermissionDenied("Impossible de selectionner une organisation non associee.")
 
         profile = request.user.account_profile
+        before_org = profile.active_organization_id
         profile.active_organization_id = organization_id
         profile.save(update_fields=["active_organization", "updated_at"])
+        write_audit_log(
+            action="organization.active_switched",
+            entity_type="account_profile",
+            entity_id=profile.id,
+            organization_id=organization_id,
+            actor=request.user,
+            before_data={"active_organization_id": before_org},
+            after_data={"active_organization_id": organization_id},
+            request=request,
+        )
 
         return Response(
             {

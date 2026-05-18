@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.accounts.models import UserRole
+from apps.audit.services import write_audit_log
 from apps.accounts.serializers import (
     LoginTokenSerializer,
     LogoutSerializer,
@@ -86,6 +87,7 @@ class UserRoleUpdateView(GenericAPIView):
 
     def patch(self, request, user_id):
         target_user = get_object_or_404(User.objects.select_related("account_profile"), id=user_id)
+        before_role = target_user.account_profile.role
         serializer = self.get_serializer(
             data=request.data,
             context={"request": request, "target_user": target_user},
@@ -94,6 +96,15 @@ class UserRoleUpdateView(GenericAPIView):
 
         target_user.account_profile.role = serializer.validated_data["role"]
         target_user.account_profile.save(update_fields=["role", "updated_at"])
+        write_audit_log(
+            action="account.role_updated",
+            entity_type="account_profile",
+            entity_id=target_user.account_profile.id,
+            actor=request.user,
+            before_data={"role": before_role},
+            after_data={"role": target_user.account_profile.role, "target_user_id": target_user.id},
+            request=request,
+        )
 
         return Response(UserSummarySerializer(target_user).data, status=status.HTTP_200_OK)
 

@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.accounts.models import UserRole
+from apps.audit.services import write_audit_log
 from apps.payments.models import (
     PaymentRequest,
     PaymentRequestStatus,
@@ -77,9 +78,25 @@ class PaymentRequestListCreateView(PaymentRequestBaseMixin, ListCreateAPIView):
         if not has_minimum_role(self.request.user, UserRole.AGENT):
             raise PermissionDenied("Role insuffisant pour creer une demande de paiement.")
 
-        serializer.save(
+        payment_request = serializer.save(
             organization_id=self.get_organization_id_or_raise(),
             created_by=self.request.user,
+        )
+        write_audit_log(
+            action="payment_request.created",
+            entity_type="payment_request",
+            entity_id=payment_request.id,
+            organization_id=payment_request.organization_id,
+            actor=self.request.user,
+            after_data={
+                "reference": payment_request.reference,
+                "status": payment_request.status,
+                "expected_amount": str(payment_request.expected_amount),
+                "paid_amount": str(payment_request.paid_amount),
+                "customer_id": payment_request.customer_id,
+                "service_id": payment_request.service_id,
+            },
+            request=self.request,
         )
 
 
@@ -99,7 +116,29 @@ class PaymentRequestDetailView(PaymentRequestBaseMixin, RetrieveUpdateAPIView):
     def perform_update(self, serializer):
         if not has_minimum_role(self.request.user, UserRole.AGENT):
             raise PermissionDenied("Role insuffisant pour modifier une demande de paiement.")
-        serializer.save()
+        instance = self.get_object()
+        before = {
+            "status": instance.status,
+            "expected_amount": str(instance.expected_amount),
+            "due_date": str(instance.due_date) if instance.due_date else None,
+            "notes": instance.notes,
+        }
+        updated = serializer.save()
+        write_audit_log(
+            action="payment_request.updated",
+            entity_type="payment_request",
+            entity_id=updated.id,
+            organization_id=updated.organization_id,
+            actor=self.request.user,
+            before_data=before,
+            after_data={
+                "status": updated.status,
+                "expected_amount": str(updated.expected_amount),
+                "due_date": str(updated.due_date) if updated.due_date else None,
+                "notes": updated.notes,
+            },
+            request=self.request,
+        )
 
 
 class PaymentRequestsByStatusView(PaymentRequestBaseMixin, ListAPIView):
@@ -150,8 +189,25 @@ class CancelPaymentRequestView(PaymentRequestBaseMixin, GenericAPIView):
         if not payment_request:
             return Response({"detail": "Demande introuvable."}, status=status.HTTP_404_NOT_FOUND)
 
+        before = {
+            "status": payment_request.status,
+            "paid_amount": str(payment_request.paid_amount),
+        }
         payment_request.status = PaymentRequestStatus.CANCELLED
         payment_request.save(update_fields=["status", "updated_at"])
+        write_audit_log(
+            action="payment_request.cancelled",
+            entity_type="payment_request",
+            entity_id=payment_request.id,
+            organization_id=payment_request.organization_id,
+            actor=request.user,
+            before_data=before,
+            after_data={
+                "status": payment_request.status,
+                "paid_amount": str(payment_request.paid_amount),
+            },
+            request=request,
+        )
         return Response(PaymentRequestSerializer(payment_request).data)
 
 
@@ -171,12 +227,30 @@ class ApplyManualPaymentView(PaymentRequestBaseMixin, GenericAPIView):
         serializer.is_valid(raise_exception=True)
 
         amount = serializer.validated_data["amount"]
+        before = {
+            "status": payment_request.status,
+            "paid_amount": str(payment_request.paid_amount),
+        }
         try:
             payment_request.apply_manual_payment(amount)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         payment_request.save(update_fields=["paid_amount", "status", "updated_at"])
+        write_audit_log(
+            action="payment_request.manual_payment_applied",
+            entity_type="payment_request",
+            entity_id=payment_request.id,
+            organization_id=payment_request.organization_id,
+            actor=request.user,
+            before_data=before,
+            after_data={
+                "status": payment_request.status,
+                "paid_amount": str(payment_request.paid_amount),
+                "applied_amount": str(amount),
+            },
+            request=request,
+        )
         return Response(PaymentRequestSerializer(payment_request).data)
 
 
@@ -231,13 +305,46 @@ class PaymentTransactionListCreateView(PaymentRequestBaseMixin, ListCreateAPIVie
             organization_id=self.get_organization_id_or_raise(),
             confirmed_by=self.request.user,
         )
+        write_audit_log(
+            action="payment_transaction.created",
+            entity_type="payment_transaction",
+            entity_id=transaction.id,
+            organization_id=transaction.organization_id,
+            actor=self.request.user,
+            after_data={
+                "payment_request_id": transaction.payment_request_id,
+                "transaction_reference": transaction.transaction_reference,
+                "amount_received": str(transaction.amount_received),
+                "status": transaction.status,
+                "payment_method": transaction.payment_method,
+            },
+            request=self.request,
+        )
 
         if transaction_status == PaymentTransactionStatus.CONFIRMED:
+            before = {
+                "status": payment_request.status,
+                "paid_amount": str(payment_request.paid_amount),
+            }
             try:
                 payment_request.apply_manual_payment(transaction.amount_received)
             except ValueError as exc:
                 raise ValidationError({"detail": str(exc)})
             payment_request.save(update_fields=["paid_amount", "status", "updated_at"])
+            write_audit_log(
+                action="payment_request.status_recomputed_from_transaction",
+                entity_type="payment_request",
+                entity_id=payment_request.id,
+                organization_id=payment_request.organization_id,
+                actor=self.request.user,
+                before_data=before,
+                after_data={
+                    "status": payment_request.status,
+                    "paid_amount": str(payment_request.paid_amount),
+                    "trigger_transaction_id": transaction.id,
+                },
+                request=self.request,
+            )
         return transaction
 
 

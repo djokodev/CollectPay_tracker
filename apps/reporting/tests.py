@@ -228,3 +228,147 @@ class DashboardReportingTests(TestCase):
         response = self.client.get("/api/reporting/dashboard/metrics/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("organization_id", response.data["error"]["details"])
+
+
+class ReportingExportsTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+        self.agent = User.objects.create_user(
+            username="export_agent",
+            email="export_agent@example.com",
+            password="CollectPaySecure123!",
+        )
+        self.agent.account_profile.role = UserRole.AGENT
+        self.agent.account_profile.save()
+
+        self.org_a = Organization.objects.create(name="Export Org A", slug="export-org-a")
+        self.org_b = Organization.objects.create(name="Export Org B", slug="export-org-b")
+        OrganizationMembership.objects.create(
+            organization=self.org_a,
+            user=self.agent,
+            role=OrganizationRole.AGENT,
+        )
+        self.agent.account_profile.active_organization = self.org_a
+        self.agent.account_profile.save()
+
+        self.customer_a = Customer.objects.create(
+            organization=self.org_a,
+            first_name="Client",
+            last_name="Alpha",
+            phone="697000001",
+            email="client.alpha@example.com",
+            created_by=self.agent,
+        )
+        self.customer_b = Customer.objects.create(
+            organization=self.org_a,
+            first_name="Client",
+            last_name="Beta",
+            phone="697000002",
+            email="client.beta@example.com",
+            created_by=self.agent,
+        )
+        self.service_a = Service.objects.create(
+            organization=self.org_a,
+            name="Inscription",
+            description="Inscription annuelle",
+            expected_amount="5000.00",
+            currency="XAF",
+            created_by=self.agent,
+        )
+        self.service_b = Service.objects.create(
+            organization=self.org_a,
+            name="Transport",
+            description="Transport scolaire",
+            expected_amount="3000.00",
+            currency="XAF",
+            created_by=self.agent,
+        )
+
+    def auth(self):
+        login = self.client.post(
+            "/api/auth/login/",
+            {"username": "export_agent", "password": "CollectPaySecure123!"},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+
+    def create_request(
+        self,
+        customer,
+        service,
+        status_value=PaymentRequestStatus.PENDING,
+        expected_amount="1000.00",
+        paid_amount="0.00",
+    ):
+        return PaymentRequest.objects.create(
+            organization=self.org_a,
+            customer=customer,
+            service=service,
+            status=status_value,
+            expected_amount=expected_amount,
+            paid_amount=paid_amount,
+            due_date=timezone.localdate() + timedelta(days=5),
+            created_by=self.agent,
+        )
+
+    def test_csv_export_returns_filtered_dataset(self):
+        self.auth()
+        self.create_request(self.customer_a, self.service_a, status_value=PaymentRequestStatus.PENDING)
+        self.create_request(
+            self.customer_b,
+            self.service_b,
+            status_value=PaymentRequestStatus.PAID,
+            expected_amount="2000.00",
+            paid_amount="2000.00",
+        )
+
+        response = self.client.get(
+            f"/api/reporting/exports/payment-requests/?export_format=csv&status={PaymentRequestStatus.PENDING}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("text/csv", response["Content-Type"])
+        self.assertIn(".csv", response["Content-Disposition"])
+
+        payload = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("request_id,reference,status", payload)
+        self.assertIn(PaymentRequestStatus.PENDING, payload)
+        self.assertNotIn(f",{PaymentRequestStatus.PAID},", payload)
+
+    def test_excel_export_returns_xlsx_attachment(self):
+        self.auth()
+        self.create_request(self.customer_a, self.service_a)
+
+        response = self.client.get("/api/reporting/exports/payment-requests/?export_format=xlsx")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertIn(".xlsx", response["Content-Disposition"])
+        self.assertTrue(response.content.startswith(b"PK"))
+
+    def test_pdf_export_returns_pdf_attachment(self):
+        self.auth()
+        self.create_request(self.customer_a, self.service_a)
+
+        response = self.client.get("/api/reporting/exports/payment-requests/?export_format=pdf")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn(".pdf", response["Content-Disposition"])
+        self.assertTrue(response.content.startswith(b"%PDF"))
+
+    def test_pdf_export_rejects_large_result_set(self):
+        self.auth()
+        from apps.reporting.views import PaymentRequestExportView
+
+        old_limit = PaymentRequestExportView.PDF_MAX_ROWS
+        PaymentRequestExportView.PDF_MAX_ROWS = 1
+        try:
+            self.create_request(self.customer_a, self.service_a)
+            self.create_request(self.customer_b, self.service_b)
+            response = self.client.get("/api/reporting/exports/payment-requests/?export_format=pdf")
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertIn("limite", str(response.data["error"]["details"]["detail"]))
+        finally:
+            PaymentRequestExportView.PDF_MAX_ROWS = old_limit

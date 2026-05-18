@@ -51,6 +51,7 @@ class ApiRootView(APIView):
                                 "generate_receipt": "/api/receipts/generate/",
                                 "audit_logs": "/api/audit/logs/",
                                 "dashboard_metrics": "/api/reporting/dashboard/metrics/",
+                                "export_payment_requests": "/api/reporting/exports/payment-requests/",
                             },
                         },
                     )
@@ -84,6 +85,7 @@ class ApiRootView(APIView):
                     "generate_receipt": reverse("receipts-generate"),
                     "audit_logs": reverse("audit-logs-list"),
                     "dashboard_metrics": reverse("reporting-dashboard-metrics"),
+                    "export_payment_requests": reverse("reporting-export-payment-requests"),
                 },
             }
         )

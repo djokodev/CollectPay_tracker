@@ -160,11 +160,14 @@
               <span class="mb-1 block text-slate-600">Demande de paiement</span>
               <select x-model.number="receiptForm.payment_request_id" class="w-full rounded-lg border border-slate-300 px-3 py-2" required>
                 <option value="">Selectionner</option>
-                <template x-for="item in actionablePaymentRequests" :key="item.id">
+                <template x-for="item in receiptablePaymentRequests" :key="item.id">
                   <option :value="item.id" x-text="item.reference"></option>
                 </template>
               </select>
             </label>
+            <p class="text-xs text-slate-500" x-show="receiptablePaymentRequests.length === 0">
+              Aucune demande eligible. Enregistre d'abord une transaction (ou un paiement manuel) pour avoir un montant paye.
+            </p>
             <label class="block text-sm">
               <span class="mb-1 block text-slate-600">Transaction (optionnel)</span>
               <input x-model.number="receiptForm.transaction_id" type="number" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
@@ -300,6 +303,7 @@
         customers: [],
         services: [],
         actionablePaymentRequests: [],
+        receiptablePaymentRequests: [],
         loginForm: { username: "", password: "" },
         requestForm: { customer: "", service: "", expected_amount: "", due_date: "", notes: "" },
         transactionForm: {
@@ -349,6 +353,17 @@
           this.statusMessage = "";
         },
 
+        formatApiError(data, fallbackMessage) {
+          const details = data?.error?.details ?? data?.detail ?? data;
+          if (Array.isArray(details)) {
+            return details.join(" ");
+          }
+          if (typeof details === "string") {
+            return details;
+          }
+          return JSON.stringify(details || fallbackMessage);
+        },
+
         async login() {
           this.clearMessages();
           try {
@@ -359,7 +374,7 @@
             });
             const data = await response.json();
             if (!response.ok) {
-              this.setError(data.error?.details || data.detail || "Echec de connexion.");
+              this.setError(this.formatApiError(data, "Echec de connexion."));
               return;
             }
             this.token = data.access;
@@ -383,6 +398,7 @@
           this.customers = [];
           this.services = [];
           this.actionablePaymentRequests = [];
+          this.receiptablePaymentRequests = [];
           localStorage.removeItem("cp_access_token");
           localStorage.removeItem("cp_refresh_token");
           localStorage.removeItem("cp_organization_id");
@@ -413,7 +429,12 @@
         },
 
         async refreshAll() {
-          await Promise.all([this.loadCustomers(), this.loadServices(), this.loadActionablePaymentRequests()]);
+          await Promise.all([
+            this.loadCustomers(),
+            this.loadServices(),
+            this.loadActionablePaymentRequests(),
+            this.loadReceiptablePaymentRequests(),
+          ]);
           this.refreshTables();
         },
 
@@ -441,6 +462,15 @@
           this.actionablePaymentRequests = [...(pending.results || []), ...(partial.results || [])];
         },
 
+        async loadReceiptablePaymentRequests() {
+          const [partial, paid] = await Promise.all([
+            this.apiGet("/api/payments/requests/?status=PARTIAL&page_size=100"),
+            this.apiGet("/api/payments/requests/?status=PAID&page_size=100"),
+          ]);
+          const merged = [...(partial.results || []), ...(paid.results || [])];
+          this.receiptablePaymentRequests = merged.filter((item) => Number(item.paid_amount) > 0);
+        },
+
         async createPaymentRequest() {
           this.clearMessages();
           try {
@@ -451,7 +481,7 @@
             });
             const data = await response.json();
             if (!response.ok) {
-              this.setError(data.error?.details || data.detail || "Echec creation demande.");
+              this.setError(this.formatApiError(data, "Echec creation demande."));
               return;
             }
             this.requestForm = { customer: "", service: "", expected_amount: "", due_date: "", notes: "" };
@@ -472,7 +502,7 @@
             });
             const data = await response.json();
             if (!response.ok) {
-              this.setError(data.error?.details || data.detail || "Echec transaction.");
+              this.setError(this.formatApiError(data, "Echec transaction."));
               return;
             }
             this.transactionForm = {
@@ -505,7 +535,7 @@
             });
             const data = await response.json();
             if (!response.ok) {
-              this.setError(data.error?.details || data.detail || "Echec generation recu.");
+              this.setError(this.formatApiError(data, "Echec generation recu."));
               return;
             }
             this.lastReceiptPublicRef = data.public_reference;
@@ -536,7 +566,7 @@
             });
             if (!response.ok) {
               const data = await response.json();
-              this.setError(data.error?.details || data.detail || "Echec export.");
+              this.setError(this.formatApiError(data, "Echec export."));
               return;
             }
             const blob = await response.blob();

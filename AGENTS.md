@@ -87,6 +87,8 @@ When all branches are completed and merged, the full product scope is covered.
 - Each branch must include code, tests, and migration updates when needed.
 - A branch is only complete when its section deliverables are verifiably implemented.
 - Mention the current branch section explicitly in task updates and final summaries.
+- Do not push commits/branches to remote without explicit user review and validation.
+- Wait for a clear user approval before any `git push` action.
 
 ## Coding Rules
 - Keep business rules in domain/service layer, not in views.

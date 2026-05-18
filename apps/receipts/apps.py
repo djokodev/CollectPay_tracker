@@ -2,4 +2,5 @@ from django.apps import AppConfig
 
 
 class ReceiptsConfig(AppConfig):
-    name = 'receipts'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.receipts"

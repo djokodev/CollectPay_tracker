@@ -44,6 +44,7 @@ class ApiRootView(APIView):
                                 "my_organizations": "/api/organizations/mine/",
                                 "switch_active_organization": "/api/organizations/switch-active/",
                                 "customers": "/api/customers/",
+                                "services": "/api/catalog/services/",
                             },
                         },
                     )
@@ -70,6 +71,7 @@ class ApiRootView(APIView):
                     "my_organizations": reverse("organizations-mine"),
                     "switch_active_organization": reverse("organizations-switch-active"),
                     "customers": reverse("customers-list-create"),
+                    "services": reverse("services-list-create"),
                 },
             }
         )

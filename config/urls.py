@@ -7,6 +7,7 @@ from config.views import ApiRootView, health_check
 urlpatterns = [
     path("health/", health_check, name="health-check"),
     path("admin/", admin.site.urls),
+    path("backoffice/", include("apps.backoffice.urls")),
     path("api/", ApiRootView.as_view(), name="api-root"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(

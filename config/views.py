@@ -52,6 +52,7 @@ class ApiRootView(APIView):
                                 "audit_logs": "/api/audit/logs/",
                                 "dashboard_metrics": "/api/reporting/dashboard/metrics/",
                                 "export_payment_requests": "/api/reporting/exports/payment-requests/",
+                                "backoffice_web": "/backoffice/",
                             },
                         },
                     )
@@ -86,6 +87,7 @@ class ApiRootView(APIView):
                     "audit_logs": reverse("audit-logs-list"),
                     "dashboard_metrics": reverse("reporting-dashboard-metrics"),
                     "export_payment_requests": reverse("reporting-export-payment-requests"),
+                    "backoffice_web": reverse("backoffice-home"),
                 },
             }
         )

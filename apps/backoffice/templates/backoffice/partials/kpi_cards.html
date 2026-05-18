@@ -1,0 +1,32 @@
+<div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+  <article class="rounded-xl border border-slate-200 bg-white p-4">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Encaisse Aujourd'hui</p>
+    <p class="mt-2 text-2xl font-bold text-slate-900">{{ today_collected }}</p>
+  </article>
+  <article class="rounded-xl border border-slate-200 bg-white p-4">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Encaisse Ce Mois</p>
+    <p class="mt-2 text-2xl font-bold text-slate-900">{{ month_collected }}</p>
+  </article>
+  <article class="rounded-xl border border-slate-200 bg-white p-4">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Montant Attendu</p>
+    <p class="mt-2 text-2xl font-bold text-slate-900">{{ expected_total }}</p>
+  </article>
+  <article class="rounded-xl border border-slate-200 bg-white p-4">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Reste A Recevoir</p>
+    <p class="mt-2 text-2xl font-bold text-amber-700">{{ remaining_gap }}</p>
+  </article>
+</div>
+<div class="mt-4 grid grid-cols-3 gap-3">
+  <article class="rounded-lg border border-slate-200 bg-white p-3 text-center">
+    <p class="text-xs text-slate-500">Pending</p>
+    <p class="text-lg font-bold text-slate-900">{{ pending_count }}</p>
+  </article>
+  <article class="rounded-lg border border-slate-200 bg-white p-3 text-center">
+    <p class="text-xs text-slate-500">Partial</p>
+    <p class="text-lg font-bold text-slate-900">{{ partial_count }}</p>
+  </article>
+  <article class="rounded-lg border border-slate-200 bg-white p-3 text-center">
+    <p class="text-xs text-slate-500">Paid</p>
+    <p class="text-lg font-bold text-slate-900">{{ paid_count }}</p>
+  </article>
+</div>

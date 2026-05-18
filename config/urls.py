@@ -1,7 +1,6 @@
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from config.views import ApiRootView, health_check
 
@@ -15,9 +14,7 @@ urlpatterns = [
         SpectacularSwaggerView.as_view(url_name="schema"),
         name="swagger-ui",
     ),
-    path("api/auth/token/", TokenObtainPairView.as_view(), name="token-obtain"),
-    path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
-    path("api/accounts/", include("apps.accounts.urls")),
+    path("api/auth/", include("apps.accounts.urls")),
     path("api/audit/", include("apps.audit.urls")),
     path("api/catalog/", include("apps.catalog.urls")),
     path("api/customers/", include("apps.customers.urls")),
